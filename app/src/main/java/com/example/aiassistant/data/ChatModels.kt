@@ -67,3 +67,11 @@ data class ParameterProperty(
     val type: String,
     val description: String
 )
+@Serializable
+data class ClickParams(val x: Int, val y: Int)
+
+@Serializable
+data class AppParams(val packageName: String)
+
+@Serializable
+data class TextParams(val text: String)

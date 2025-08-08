@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">AIAssistant</string>
+    <string name="accessibility_service_description">AI 助手代理服务，用于执行自动化操作</string>
 </resources>

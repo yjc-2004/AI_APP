@@ -15,12 +15,25 @@ import com.example.aiassistant.domain.LocalTools.getCurrentWeather
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.content.Context
+import com.example.aiassistant.data.AppParams
+import com.example.aiassistant.data.ClickParams
+import com.example.aiassistant.data.TextParams
+import com.example.aiassistant.domain.SystemTools
+import kotlinx.serialization.json.Json
+import java.io.IOException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.builtins.*
+import kotlinx.serialization.serializer
+import kotlinx.serialization.Serializable
+import com.example.aiassistant.domain.ScreenTools
 
 class ChatViewModel : ViewModel() {
 
     // 1. 初始化数据仓库，用于网络请求
     private val repository = ChatRepository()
 
+    private val json = Json { ignoreUnknownKeys = true }
     // 2. 内部状态，使用为API定义的复杂ChatMessage模型 (com.example.aiassistant.data.ChatMessage)
     private val _apiMessages = MutableStateFlow<List<com.example.aiassistant.data.ChatMessage>>(emptyList())
     // 3. 暴露给UI (MainActivity) 的只读状态流
@@ -60,8 +73,163 @@ class ChatViewModel : ViewModel() {
                         required = listOf("location")
                     )
                 )
+            ),
+            Tool(
+                 type = "function",
+                 function = FunctionDescription(
+                 name = "simulate_click",
+                 description = "模拟在屏幕的指定 x 和 y 坐标上进行一次点击。坐标原点 (0,0) 在屏幕左上角。",
+                 parameters = FunctionParameters(
+                    type = "object",
+                    properties = mapOf(
+                        "x" to ParameterProperty(
+                            type = "integer",
+                            description = "要点击位置的 x 坐标"
+                        ),
+                        "y" to ParameterProperty(
+                            type = "integer",
+                            description = "要点击位置的 y 坐标"
+                        )
+                    ),
+                    required = listOf("x", "y")
+                )
             )
-        )
+        ),
+
+        // 2. 打开应用工具
+        Tool(
+            type = "function",
+            function = FunctionDescription(
+                name = "open_app",
+                description = "根据提供的应用包名（Package Name）打开一个指定的 Android 应用。",
+                parameters = FunctionParameters(
+                    type = "object",
+                    properties = mapOf(
+                        "packageName" to ParameterProperty(
+                            type = "string",
+                            description = "要打开的应用的完整包名, 例如 'com.google.android.calculator'"
+                        )
+                    ),
+                    required = listOf("packageName")
+                )
+            )
+        ),
+
+        // 3. 输入文字工具
+        Tool(
+            type = "function",
+            function = FunctionDescription(
+                name = "input_text",
+                description = "在当前屏幕上拥有焦点的输入框中输入指定的文本。如果当前没有活动的输入框，则该操作可能会失败。",
+                parameters = FunctionParameters(
+                    type = "object",
+                    properties = mapOf(
+                        "text" to ParameterProperty(
+                            type = "string",
+                            description = "要输入到焦点输入框中的文字内容。"
+                        )
+                    ),
+                    required = listOf("text")
+                )
+            )
+        ) ,
+        Tool(
+            type = "function",
+            function = FunctionDescription(
+            name = "list_available_manuals",
+            description = "获取所有可用的APP说明书列表。当用户问题可能与某个APP操作有关，但不确定是哪个APP时使用。",
+            parameters = FunctionParameters(
+                type = "object",
+                properties = emptyMap<String, ParameterProperty>(), // 显式指定类型
+                required = emptyList()
+            )
+            )
+            ),
+        Tool(
+            type = "function",
+            function = FunctionDescription(
+                name = "get_manual_section",
+                description = "从指定的说明书中，根据关键词获取特定操作或功能的详细说明章节。",
+                parameters = FunctionParameters(
+                    type = "object",
+                    properties = mapOf(
+                        "manual_name" to ParameterProperty(
+                            type = "string",
+                            description = "说明书的文件名, 例如 'photo_editor_manual.md'。必须从 list_available_manuals 工具的返回结果中选择。"
+                        ),
+                        "section_query" to ParameterProperty(
+                            type = "string",
+                            description = "描述用户想要查询的操作的关键词, 例如 '裁剪', '导出', '转换视频'。"
+                        )
+                    ),
+                    required = listOf("manual_name", "section_query")
+                )
+            )
+        ),
+
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "observe_screen",
+                    description = "分析当前手机屏幕，并以JSON格式返回所有可交互的UI元素列表。每个元素都有一个唯一的 'id'，用于后续的点击或输入操作。",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = emptyMap(),
+                        required = emptyList()
+                    )
+                )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "click_element",
+                    description = "根据 'observe_screen' 返回的元素 'id' 点击一个UI元素。",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = mapOf(
+                            "element_id" to ParameterProperty(
+                                type = "integer",
+                                description = "从 'observe_screen' 获取到的目标元素的 'id'。"
+                            )
+                        ),
+                        required = listOf("element_id")
+                    )
+                )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "input_text_in_element",
+                    description = "在 'observe_screen' 返回的指定 'id' 的输入框元素中输入文本。",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = mapOf(
+                            "element_id" to ParameterProperty(
+                                type = "integer",
+                                description = "从 'observe_screen' 获取到的目标输入框元素的 'id'。"
+                            ),
+                            "text" to ParameterProperty(
+                                type = "string",
+                                description = "要输入的文本内容。"
+                            )
+                        ),
+                        required = listOf("element_id", "text")
+                    )
+                )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "perform_back_press",
+                    description = "执行一个全局返回操作，等同于用户点击了系统导航栏的返回按钮或使用了返回手势。",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = emptyMap(), // 无需参数
+                        required = emptyList()
+                    )
+                )
+            )
+            )
     }
 
 
@@ -69,6 +237,11 @@ class ChatViewModel : ViewModel() {
      * 当ViewModel第一次被创建时执行
      */
     init {
+        val systemMessage = com.example.aiassistant.data.ChatMessage(
+            role = "system",
+            content = "你是一个名叫“小智”的个人助理... 当你需要查询某个APP的操作方法时，你**必须首先**使用 list_available_manuals工具来获取当前所有可用的说明书列表。然后，根据用户的提问和上一步返回的列表，选择一个最匹配的说明书文件名，并使用get_manual_section工具来查询具体章节。**禁止在未确认文件存在的情况下，直接猜测并使用get_manual_section 工具**"
+        )
+        conversationHistory.add(systemMessage)
         // 添加初始的欢迎语
         conversationHistory.add(
             com.example.aiassistant.data.ChatMessage(
@@ -84,7 +257,7 @@ class ChatViewModel : ViewModel() {
     /**
      * 从UI调用的主要方法，用于发送新消息
      */
-    fun sendMessage(userInput: String) {
+    fun sendMessage(userInput: String, context: Context) { // <--- 修改点
         // 忽略空消息
         if (userInput.isBlank()) return
 
@@ -97,14 +270,14 @@ class ChatViewModel : ViewModel() {
 
         // 启动一个后台协程来处理与模型的交互，避免阻塞主线程
         viewModelScope.launch {
-            processConversation()
+            processConversation(context) // <--- 修改点
         }
     }
 
     /**
      * 处理与大模型API的单次请求和响应
      */
-    private suspend fun processConversation() {
+    private suspend fun processConversation(context: Context) {
         val request = ChatCompletionRequest(
             model = "qwen-max",
             messages = conversationHistory, // 发送完整对话历史
@@ -128,7 +301,7 @@ class ChatViewModel : ViewModel() {
                     // 需要调用工具，先更新UI显示模型的思考过程（可选）
                     _apiMessages.value = conversationHistory.toList()
                     // 执行工具调用，并在完成后再次调用processConversation
-                    handleToolCalls(assistantMessage.toolCalls)
+                    handleToolCalls(assistantMessage.toolCalls,context)
                 }
             },
             onFailure = { error ->
@@ -140,32 +313,152 @@ class ChatViewModel : ViewModel() {
         )
     }
 
+
+
+    @Serializable
+    data class ElementClickParams(val element_id: Int)
+
+    @Serializable
+    data class ElementInputParams(val element_id: Int, val text: String)
+
+
+
     /**
      * 当模型请求调用工具时执行
      */
-    private suspend fun handleToolCalls(toolCalls: List<ToolCall>) {
-        // (当前范例只处理第一个工具调用请求)
-        val toolCall = toolCalls.first()
+    private suspend fun handleToolCalls(toolCalls: List<ToolCall>, context: Context) {
+        // 遍历模型请求的所有工具调用
+        for (toolCall in toolCalls) {
+            // 根据函数名调用对应的本地Kotlin函数
+            val toolResultContent = when (toolCall.function.name) {
+                // 已有工具
+                "get_current_time" -> getCurrentTime()
+                "get_current_weather" -> {
+                    // 假设您有一个LocationParams数据类用于解析
+                    // val params = json.decodeFromString<LocationParams>(toolCall.function.arguments)
+                    // getCurrentWeather(params.location)
+                    // 为了简单起见，如果您的getCurrentWeather已经处理了JSON字符串，可以直接调用
+                    getCurrentWeather(toolCall.function.arguments)
+                }
 
-        // 根据函数名调用对应的本地Kotlin函数
-        val toolResultContent = when (toolCall.function.name) {
-            "get_current_weather" -> getCurrentWeather(toolCall.function.arguments)
-            "get_current_time" -> getCurrentTime()
-            else -> "错误：未知的工具"
+                // 新增的系统工具
+                "simulate_click" -> {
+                    val params = json.decodeFromString<ClickParams>(toolCall.function.arguments)
+                    SystemTools.simulateClick(params.x, params.y)
+                }
+                "open_app" -> {
+                    val params = json.decodeFromString<AppParams>(toolCall.function.arguments)
+                    // 这里传入从UI层一路传递下来的Context
+                    SystemTools.openApp(context, params.packageName)
+                }
+                "input_text" -> {
+                    val params = json.decodeFromString<TextParams>(toolCall.function.arguments)
+                    SystemTools.inputText(params.text)
+                }
+                "list_available_manuals" -> {
+                    listManualsFromAssets(context)
+                }
+                "get_manual_section" -> {
+                    @Serializable data class Params(val manual_name: String, val section_query: String)
+                    val params = json.decodeFromString<Params>(toolCall.function.arguments)
+                    getSectionFromManual(context, params.manual_name, params.section_query)
+                }
+                "observe_screen" -> {
+                    ScreenTools.analyzeScreen()
+                }
+                "click_element" -> {
+                    val params = json.decodeFromString<ElementClickParams>(toolCall.function.arguments)
+                    ScreenTools.clickElementById(params.element_id)
+                }
+                "input_text_in_element" -> {
+                    val params =
+                        json.decodeFromString<ElementInputParams>(toolCall.function.arguments)
+                    ScreenTools.inputTextInElementById(params.element_id, params.text)
+                }
+                "perform_back_press" -> {
+                    SystemTools.performBackPress()
+                }
+                    else -> "错误：未知的工具 ${toolCall.function.name}"
+            }
+
+            // 将工具的执行结果封装成一条 "tool" 角色的消息
+            val toolMessage = com.example.aiassistant.data.ChatMessage(
+                role = "tool",
+                content = toolResultContent,
+                toolCallId = toolCall.id // 必须包含tool_call_id以对应请求
+            )
+            conversationHistory.add(toolMessage)
         }
-
-        // 将工具的执行结果封装成一条 "tool" 角色的消息
-        val toolMessage = com.example.aiassistant.data.ChatMessage(
-            role = "tool",
-            content = toolResultContent,
-            toolCallId = toolCall.id // 必须包含tool_call_id以对应请求
-        )
-        conversationHistory.add(toolMessage)
 
         // 更新UI以显示工具消息（可选，通常不显示）
         _apiMessages.value = conversationHistory.toList()
 
-        // 再次调用模型，并传入工具执行结果，让模型根据工具结果生成最终回复
-        processConversation()
+        // 在所有工具都执行完毕后，再次调用模型，让模型根据所有工具结果生成最终回复
+        processConversation(context)
+    }
+
+
+    /**
+     * 解析Markdown文件，将其内容按二级标题 (##) 分割成章节Map.
+     * @param markdownContent 完整的md文件内容.
+     * @return 一个Map，Key是章节标题，Value是该章节的完整内容.
+     */
+    fun parseMarkdownManual(markdownContent: String): Map<String, String> {
+        val sections = mutableMapOf<String, String>()
+        val lines = markdownContent.lines()
+        var currentSectionTitle: String? = null
+        val currentSectionContent = StringBuilder()
+
+        for (line in lines) {
+            if (line.startsWith("## ")) {
+                if (currentSectionTitle != null) {
+                    sections[currentSectionTitle] = currentSectionContent.toString().trim()
+                }
+                currentSectionTitle = line.substring(3).trim()
+                currentSectionContent.clear()
+            } else {
+                currentSectionContent.append(line).append("\n")
+            }
+        }
+
+        if (currentSectionTitle != null) {
+            sections[currentSectionTitle] = currentSectionContent.toString().trim()
+        }
+
+        return sections
+    }
+
+
+
+    private fun listManualsFromAssets(context: Context): String {
+        return try {
+            val manuals = context.assets.list("manuals")?.toList() ?: emptyList()
+            Json.encodeToString(ListSerializer(String.serializer()), manuals)
+        } catch (e: IOException) {
+            "错误: 无法读取说明书列表。"
+        }
+    }
+
+    private fun getSectionFromManual(context: Context, manualName: String, query: String): String {
+        return try {
+            // 1. 读取并解析指定的说明书
+            val markdownContent = context.assets.open("manuals/$manualName").bufferedReader().use { it.readText() }
+            val sections = parseMarkdownManual(markdownContent)
+
+            // 2. 查找最相关的章节 (这里使用简单的关键词匹配)
+            val bestMatch = sections.entries.find { (title, _) ->
+                title.contains(query, ignoreCase = true)
+            }
+
+            if (bestMatch != null) {
+                // 找到了，返回章节内容
+                "从 '$manualName' 中找到相关章节:\n\n${bestMatch.value}"
+            } else {
+                // 没找到
+                "在 '$manualName' 中未找到关于 '$query' 的章节。可用的章节标题有: ${sections.keys.joinToString()}"
+            }
+        } catch (e: IOException) {
+            "错误: 无法读取或解析说明书 '$manualName'。"
+        }
     }
 }
