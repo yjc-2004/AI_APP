@@ -8,6 +8,7 @@ import com.example.aiassistant.services.AgentAccessibilityService
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import android.accessibilityservice.AccessibilityService
 
 // 1. 定义一个数据类来存储UI元素的信息
 // @Serializable 注解让它可以被 kotlinx.serialization 库自动转换为JSON
@@ -145,4 +146,14 @@ object ScreenTools {
 
         return (hasText || hasContentDesc || isClickable || isEditable) && isLargeEnough
     }
+
+
+    fun goToHome(): String {
+        val service = AgentAccessibilityService.instance ?: return "错误: 无障碍服务未连接。"
+
+        val success = service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+        return if (success) "成功返回主页面。" else "错误: 无法返回主页面。"
+    }
+
+
 }
