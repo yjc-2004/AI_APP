@@ -9,6 +9,7 @@ import retrofit2.Retrofit
 import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.POST
+import java.util.concurrent.TimeUnit
 
 
 object RetrofitClient {
@@ -25,6 +26,18 @@ object RetrofitClient {
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         })
+
+        // --- 新增的超时设置 ---
+        // 1. 读取超时：等待服务器响应数据的最长时间。这是解决模型思考时间长的关键！
+        .readTimeout(60, TimeUnit.SECONDS)
+
+        // 2. 连接超时：与服务器建立连接的最长时间。
+        .connectTimeout(60, TimeUnit.SECONDS)
+
+        // 3. 写入超时：向服务器发送请求数据的最长时间。
+        .writeTimeout(60, TimeUnit.SECONDS)
+        // --- 超时设置结束 ---
+
         .build()
 
     val instance: DashScopeApiService by lazy {

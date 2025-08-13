@@ -75,3 +75,12 @@ data class AppParams(val packageName: String)
 
 @Serializable
 data class TextParams(val text: String)
+
+@Serializable
+data class LaunchAppParams(val packageName: String)
+
+@Serializable
+data class FunctionProperty(
+    val type: String,        // 参数的类型是什么？（例如："string", "number", "boolean"）
+    val description: String  // 这个参数是干什么用的？（给 AI 看的文字描述）
+)

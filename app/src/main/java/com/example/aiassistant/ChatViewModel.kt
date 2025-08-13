@@ -27,6 +27,8 @@ import kotlinx.serialization.builtins.*
 import kotlinx.serialization.serializer
 import kotlinx.serialization.Serializable
 import com.example.aiassistant.domain.ScreenTools
+import com.example.aiassistant.data.LaunchAppParams
+import com.example.aiassistant.data.FunctionProperty
 
 class ChatViewModel : ViewModel() {
 
@@ -92,25 +94,6 @@ class ChatViewModel : ViewModel() {
                         )
                     ),
                     required = listOf("x", "y")
-                )
-            )
-        ),
-
-        // 2. 打开应用工具
-        Tool(
-            type = "function",
-            function = FunctionDescription(
-                name = "open_app",
-                description = "根据提供的应用包名（Package Name）打开一个指定的 Android 应用。",
-                parameters = FunctionParameters(
-                    type = "object",
-                    properties = mapOf(
-                        "packageName" to ParameterProperty(
-                            type = "string",
-                            description = "要打开的应用的完整包名, 例如 'com.google.android.calculator'"
-                        )
-                    ),
-                    required = listOf("packageName")
                 )
             )
         ),
@@ -228,8 +211,62 @@ class ChatViewModel : ViewModel() {
                         required = emptyList()
                     )
                 )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "launch_app",
+                    description = "启动一个指定的安卓应用。你需要提供该应用的标准包名。",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = mapOf(
+                            // 正如您所指出的，这里应该使用 ParameterProperty
+                            "packageName" to ParameterProperty(
+                                type = "string",
+                                description = "要启动的应用的包名，例如 'com.android.settings' 或 'com.android.chrome',包名参数使用get_installed_apps工具获得所有安装包名"
+                            )
+                        ),
+                        required = listOf("packageName")
+                    )
+                )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "get_installed_apps",
+                    description = "获取手机上安装的所有应用程序的包名列表",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = mapOf(),
+                        required = listOf()
+                    )
+                )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "return_to_home_screen",
+                    description = "返回到安卓设备的主屏幕（桌面）。",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = emptyMap(), // 此工具不需要参数
+                        required = emptyList()
+                    )
+                )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "clean_memory",
+                    description = "清理后台进程",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = emptyMap(), // 此工具不需要参数
+                        required = emptyList()
+                    )
+                )
             )
-            )
+        )
     }
 
 
@@ -239,7 +276,21 @@ class ChatViewModel : ViewModel() {
     init {
         val systemMessage = com.example.aiassistant.data.ChatMessage(
             role = "system",
-            content = "你是一个名叫“小智”的个人助理... 当你需要查询某个APP的操作方法时，你**必须首先**使用 list_available_manuals工具来获取当前所有可用的说明书列表。然后，根据用户的提问和上一步返回的列表，选择一个最匹配的说明书文件名，并使用get_manual_section工具来查询具体章节。**禁止在未确认文件存在的情况下，直接猜测并使用get_manual_section 工具**"
+            content = """
+            你是一个名叫“小智”的个人助理。
+
+            你的任务是
+            - 帮助用户查询各种APP的操作说明书。
+            工作流程指引：
+            1.  当用户提问关于某个APP的操作方法时，你**必须首先**使用 `list_available_manuals` 工具来获取当前所有可用的说明书列表。
+            2.  然后，根据用户的提问和上一步返回的列表，选择一个最匹配的说明书文件名。
+            3.  最后，使用 `get_manual_section` 工具并传入正确的文件名来查询具体章节。
+            - 帮助用户打开各种APP
+            工作流程指引：
+            1. 当用户让你打开某个app,你需要先查询手机安装的所有APP,之后选择一个最匹配的app作为参数,使用app启动工具打开
+            
+            **重要规则：禁止在未确认文件存在的情况下，直接猜测并使用 `get_manual_section` 工具。**
+        """.trimIndent() // <-- 使用 trimIndent() 来移除多余的格式化缩进
         )
         conversationHistory.add(systemMessage)
         // 添加初始的欢迎语
@@ -279,7 +330,7 @@ class ChatViewModel : ViewModel() {
      */
     private suspend fun processConversation(context: Context) {
         val request = ChatCompletionRequest(
-            model = "qwen-max",
+            model = "qwen-plus",
             messages = conversationHistory, // 发送完整对话历史
             tools = availableTools // 告知模型它能使用哪些工具
         )
@@ -346,11 +397,6 @@ class ChatViewModel : ViewModel() {
                     val params = json.decodeFromString<ClickParams>(toolCall.function.arguments)
                     SystemTools.simulateClick(params.x, params.y)
                 }
-                "open_app" -> {
-                    val params = json.decodeFromString<AppParams>(toolCall.function.arguments)
-                    // 这里传入从UI层一路传递下来的Context
-                    SystemTools.openApp(context, params.packageName)
-                }
                 "input_text" -> {
                     val params = json.decodeFromString<TextParams>(toolCall.function.arguments)
                     SystemTools.inputText(params.text)
@@ -377,6 +423,29 @@ class ChatViewModel : ViewModel() {
                 }
                 "perform_back_press" -> {
                     SystemTools.performBackPress()
+                }
+                "launch_app" -> {
+                    try {
+                        // 解析LLM传来的JSON参数
+                        val params =
+                            json.decodeFromString<LaunchAppParams>(toolCall.function.arguments)
+                        // 调用您在第一步中创建的函数
+                        SystemTools.launchApp(context, params.packageName)
+                    } catch (e: Exception) {
+                        "错误：解析参数失败 - ${e.message}"
+                    }
+                }
+                "get_installed_apps" -> {
+                    // 这个工具不需要参数，直接调用即可
+                    SystemTools.getInstalledApps(context)
+                }
+                "return_to_home_screen" -> {
+                    // 调用在第一步中创建的函数
+                    SystemTools.returnToHomeScreen(context)
+                }
+                "clean_memory" -> {
+                    // 调用在第一步中创建的函数
+                    SystemTools.cleanMemory(context)
                 }
                     else -> "错误：未知的工具 ${toolCall.function.name}"
             }
