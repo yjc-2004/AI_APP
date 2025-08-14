@@ -30,6 +30,17 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:label="设置"
+            android:parentActivityName=".ui.MainActivity"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".ui.MainActivity" />
+        </activity>
+
     <service
             android:name=".services.AgentAccessibilityService"
             android:exported="true"
