@@ -18,20 +18,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import android.content.Context
-import com.example.aiassistant.data.AppParams
 import com.example.aiassistant.data.ClickParams
 import com.example.aiassistant.data.TextParams
 import com.example.aiassistant.domain.SystemTools
 import kotlinx.serialization.json.Json
 import java.io.IOException
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.builtins.*
-import kotlinx.serialization.serializer
 import kotlinx.serialization.Serializable
 import com.example.aiassistant.domain.ScreenTools
 import com.example.aiassistant.data.LaunchAppParams
-import com.example.aiassistant.data.FunctionProperty
-import androidx.preference.PreferenceManager
 import com.example.aiassistant.config.AppConfig
 
 class ChatViewModel : ViewModel() {
@@ -592,7 +587,7 @@ class ChatViewModel : ViewModel() {
         return try {
             val manuals = context.assets.list("manuals")?.toList() ?: emptyList()
             Json.encodeToString(ListSerializer(String.serializer()), manuals)
-        } catch (e: IOException) {
+        } catch () {
             "错误: 无法读取说明书列表。"
         }
     }
@@ -615,7 +610,7 @@ class ChatViewModel : ViewModel() {
                 // 没找到
                 "在 '$manualName' 中未找到关于 '$query' 的章节。可用的章节标题有: ${sections.keys.joinToString()}"
             }
-        } catch (e: IOException) {
+        } catch () {
             "错误: 无法读取或解析说明书 '$manualName'。"
         }
     }
