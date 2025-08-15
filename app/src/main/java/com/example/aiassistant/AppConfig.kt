@@ -32,7 +32,9 @@ object AppConfig {
         // 1. 首次加载配置
         val storedApiKey = prefs.getString("key_api_key", "") ?: ""
         apiKey = if (storedApiKey.isBlank()) {
-            "sk-e97b135e18b542138d6313ed98f08749" // 仅在用户从未设置过时使用
+          
+            "sk-4d0a9f150ced4e96899841b02bef1065" // 仅在用户从未设置过时使用
+
         } else {
             storedApiKey
         }
