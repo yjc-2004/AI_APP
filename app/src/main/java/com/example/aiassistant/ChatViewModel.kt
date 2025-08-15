@@ -32,7 +32,8 @@ import com.example.aiassistant.domain.ScreenTools
 import com.example.aiassistant.data.LaunchAppParams
 import com.example.aiassistant.data.FunctionProperty
 import androidx.preference.PreferenceManager
-import com.example.aiassistant.config.AppConfig
+import com.example.aiassistant.data.ScrollScreenParams
+import com.example.aiassistant.utils.ToastHelper
 
 class ChatViewModel : ViewModel() {
 
@@ -257,6 +258,31 @@ class ChatViewModel : ViewModel() {
                         required = emptyList()
                     )
                 )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
+                    name = "scrollScreen",
+                    description = "滑动屏幕",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = mapOf(
+                            "direction" to ParameterProperty(
+                                type = "string",
+                                description = "滑动方向，必须是以下值之一：'up'（上滑）、'down'（下滑）、'left'（左滑）、'right'（右滑）"
+                            ),
+                            "distance" to ParameterProperty(
+                                type = "number",
+                                description = "滑动的像素距离（必须为正数，例如 500 表示滑动500像素）"
+                            ),
+                            "duration" to ParameterProperty(
+                                type = "number",
+                                description = "滑动执行时间（毫秒，必须为正数，例如 1000 表示滑动过程持续1秒）"
+                            )
+                        ),
+                        required = listOf("direction", "distance", "duration")
+                    )
+                )
             )
         )
     }
@@ -282,8 +308,7 @@ class ChatViewModel : ViewModel() {
             1. 当用户让你打开某个app,你需要先查询手机安装的所有APP,之后选择一个最匹配的app作为参数,使用app启动工具打开
             - 帮助用户完成app操作
             1,当用户要求你在app操作时,首先找到一个叫功能列表的说明书,那里有你可以实现的功能,知道功能后在相应的app说明书中查具体功能,再执行,执行时如果没有找到相应按钮,等待一段时间重新试试
-            **重要规则：禁止在未确认文件存在的情况下，直接猜测并使用 `get_manual_section` 工具,所有的app操作必须基于说明书,注意说明书是给你看的,除非用户要求输出说明书,不然你就直接按照说明书执行动作**，如果遇到异常情况，返回到聊天页面
-
+            **重要规则：禁止在未确认文件存在的情况下，直接猜测并使用 `get_manual_section` 工具,所有的app操作必须基于说明书,注意说明书是给你看的,除非用户要求输出说明书,不然你就直接按照说明书执行动作**
 
         """.trimIndent() // <-- 使用 trimIndent() 来移除多余的格式化缩进
         )
@@ -324,7 +349,7 @@ class ChatViewModel : ViewModel() {
      * 处理与大模型API的单次请求和响应
      */
     private suspend fun processConversation(context: Context) {
-        val modelName = AppConfig.modelName
+        val modelName = null
         val request = ChatCompletionRequest(
             model = modelName ?: "qwen3-235b-a22b-instruct-2507",
             messages = conversationHistory, // 发送完整对话历史
@@ -344,6 +369,13 @@ class ChatViewModel : ViewModel() {
                 if (assistantMessage.toolCalls.isNullOrEmpty()) {
                     // 无需调用工具，对话结束，更新UI
                     _apiMessages.value = conversationHistory.toList()
+                    
+                    // 显示AI回复提示
+                    assistantMessage.content?.let {
+                        if (it.isNotBlank()) {
+                            ToastHelper.showShortToast(context, "AI回复：${it.take(30)}...")
+                        }
+                    }
                 } else {
                     // 需要调用工具，先更新UI显示模型的思考过程（可选）
                     _apiMessages.value = conversationHistory.toList()
@@ -438,6 +470,10 @@ class ChatViewModel : ViewModel() {
                 "return_to_home_screen" -> {
                     // 调用在第一步中创建的函数
                     SystemTools.returnToHomeScreen(context)
+                }
+                "scrollScreen" -> {
+                    val params = json.decodeFromString<ScrollScreenParams>(toolCall.function.arguments)
+                    SystemTools.scrollScreen(params.direction, params.distance, params.duration)
                 }
                     else -> "错误：未知的工具 ${toolCall.function.name}"
             }
