@@ -253,18 +253,6 @@ class ChatViewModel : ViewModel() {
                         required = emptyList()
                     )
                 )
-            ),
-            Tool(
-                type = "function",
-                function = FunctionDescription(
-                    name = "clean_memory",
-                    description = "清理后台进程",
-                    parameters = FunctionParameters(
-                        type = "object",
-                        properties = emptyMap(), // 此工具不需要参数
-                        required = emptyList()
-                    )
-                )
             )
         )
     }
@@ -282,14 +270,16 @@ class ChatViewModel : ViewModel() {
             你的任务是
             - 帮助用户查询各种APP的操作说明书。
             工作流程指引：
-            1.  当用户提问关于某个APP的操作方法时，你**必须首先**使用 `list_available_manuals` 工具来获取当前所有可用的说明书列表。
+            1.  当用户要你操作某个APP时，你必须首先使用 `list_available_manuals` 工具来获取当前所有可用的说明书列表。
             2.  然后，根据用户的提问和上一步返回的列表，选择一个最匹配的说明书文件名。
             3.  最后，使用 `get_manual_section` 工具并传入正确的文件名来查询具体章节。
             - 帮助用户打开各种APP
             工作流程指引：
             1. 当用户让你打开某个app,你需要先查询手机安装的所有APP,之后选择一个最匹配的app作为参数,使用app启动工具打开
-            
-            **重要规则：禁止在未确认文件存在的情况下，直接猜测并使用 `get_manual_section` 工具。**
+            - 帮助用户完成app操作
+            1,当用户要求你在app操作时,首先找到一个叫功能列表的说明书,那里有你可以实现的功能,知道功能后在相应的app说明书中查具体功能,再执行,执行时如果没有找到相应按钮,等待一段时间重新试试
+            **重要规则：禁止在未确认文件存在的情况下，直接猜测并使用 `get_manual_section` 工具,所有的app操作必须基于说明书,注意说明书是给你看的,除非用户要求输出说明书,不然你就直接按照说明书执行动作**
+
         """.trimIndent() // <-- 使用 trimIndent() 来移除多余的格式化缩进
         )
         conversationHistory.add(systemMessage)
@@ -330,7 +320,7 @@ class ChatViewModel : ViewModel() {
      */
     private suspend fun processConversation(context: Context) {
         val request = ChatCompletionRequest(
-            model = "qwen-plus",
+            model = "qwen3-235b-a22b-instruct-2507",
             messages = conversationHistory, // 发送完整对话历史
             tools = availableTools // 告知模型它能使用哪些工具
         )
@@ -442,10 +432,6 @@ class ChatViewModel : ViewModel() {
                 "return_to_home_screen" -> {
                     // 调用在第一步中创建的函数
                     SystemTools.returnToHomeScreen(context)
-                }
-                "clean_memory" -> {
-                    // 调用在第一步中创建的函数
-                    SystemTools.cleanMemory(context)
                 }
                     else -> "错误：未知的工具 ${toolCall.function.name}"
             }
