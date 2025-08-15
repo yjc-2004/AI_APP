@@ -94,33 +94,5 @@ object SystemTools {
         context.startActivity(intent)
         return "已执行返回主屏幕操作。"
     }
-    fun cleanMemory(context: Context): String {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val myPackageName = context.packageName
 
-        if (activityManager == null) {
-            return "无法访问系统服务来清理内存。"
-        }
-
-        val runningProcesses = activityManager.runningAppProcesses
-        if (runningProcesses.isNullOrEmpty()) {
-            return "没有找到可清理的后台进程。"
-        }
-
-        var cleanedProcessesCount = 0
-        runningProcesses.forEach { processInfo ->
-            // 关键步骤：确保不会杀死应用自身的进程
-            if (processInfo.processName != myPackageName) {
-                // 终止其他后台进程
-                activityManager.killBackgroundProcesses(processInfo.processName)
-                cleanedProcessesCount++
-            }
-        }
-
-        return if (cleanedProcessesCount > 0) {
-            "内存清理完成，共清理了 $cleanedProcessesCount 个后台进程。"
-        } else {
-            "当前没有可清理的非系统核心后台进程。"
-        }
-    }
 }
