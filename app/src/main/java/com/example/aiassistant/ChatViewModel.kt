@@ -1,6 +1,8 @@
 // 文件路径: app/src/main/java/com/example/aiassistant/ui/ChatViewModel.kt
 package com.example.aiassistant.ui
 
+
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aiassistant.data.ChatCompletionRequest
@@ -29,6 +31,8 @@ import kotlinx.serialization.Serializable
 import com.example.aiassistant.domain.ScreenTools
 import com.example.aiassistant.data.LaunchAppParams
 import com.example.aiassistant.data.FunctionProperty
+import androidx.preference.PreferenceManager
+import com.example.aiassistant.config.AppConfig
 
 class ChatViewModel : ViewModel() {
 
@@ -253,18 +257,6 @@ class ChatViewModel : ViewModel() {
                         required = emptyList()
                     )
                 )
-            ),
-            Tool(
-                type = "function",
-                function = FunctionDescription(
-                    name = "clean_memory",
-                    description = "清理后台进程",
-                    parameters = FunctionParameters(
-                        type = "object",
-                        properties = emptyMap(), // 此工具不需要参数
-                        required = emptyList()
-                    )
-                )
             )
         )
     }
@@ -282,14 +274,114 @@ class ChatViewModel : ViewModel() {
             你的任务是
             - 帮助用户查询各种APP的操作说明书。
             工作流程指引：
-            1.  当用户提问关于某个APP的操作方法时，你**必须首先**使用 `list_available_manuals` 工具来获取当前所有可用的说明书列表。
+            1.  当用户要你操作某个APP时，你必须首先使用 `list_available_manuals` 工具来获取当前所有可用的说明书列表。
             2.  然后，根据用户的提问和上一步返回的列表，选择一个最匹配的说明书文件名。
             3.  最后，使用 `get_manual_section` 工具并传入正确的文件名来查询具体章节。
             - 帮助用户打开各种APP
             工作流程指引：
             1. 当用户让你打开某个app,你需要先查询手机安装的所有APP,之后选择一个最匹配的app作为参数,使用app启动工具打开
+            - 帮助用户完成app操作
+            1,当用户要求你在app操作时,首先找到一个叫功能列表的说明书,那里有你可以实现的功能,知道功能后在相应的app说明书中查具体功能,再执行,执行时如果没有找到相应按钮,等待一段时间重新试试
+            **重要规则：禁止在未确认文件存在的情况下，直接猜测并使用 `get_manual_section` 工具,所有的app操作必须基于说明书,注意说明书是给你看的,除非用户要求输出说明书,不然你就直接按照说明书执行动作**
+            - 一键统一回复多平台未读信息
+          工作流程指引：
+            1.触发条件：用户点击“一键统一回复”按钮或输入“回复未读消息”等指令时启动。
+
+            2.未读检测（细化APP特征）：
+             - QQ（com.tencent.mobileqq）：未读标识为消息列表中对话左侧的红色数字/圆点。
+             - 微信（com.tencent.mm）：未读标识为对话名称旁的红色数字/“未读”标签。
+             - 抖音（com.ss.android.ugc.aweme）：未读标识为底部导航栏第4个“消息图标”（对话气泡样式）右上角的红色数字/圆点；进入消息列表后，未读对话左侧有红色小圆点。
+             - 小红书（com.xiaohongshu.android）：未读标识为底部导航栏第四个“消息图标”上的红色圆点；进入消息列表后，未读对话右侧有红色圆点。
+
+            3. 回复执行（分平台细化步骤）：
+             - 通用步骤：对有未读的APP，调用 `launch_app` 打开，进入消息列表。
+             - 分平台操作：
+             - 抖音：
+                a. 进入抖音后，`observe_screen` 定位底部导航栏第4个“消息图标”（特征：右上角红标），`click_element` 点击（验证：界面顶部显示“消息”标题）。
+                b. 消息列表中，未读对话特征必须满足：右侧红色圆点；`observe_screen` 定位第一条未读对话的“完整条目区域”（含头像、名称、消息预览，宽占满屏幕，高约80-100像素）。
+                c. 点击区域：必须点击该条目的“中间偏左位置”（覆盖头像和名称区域；`click_element` 点击后，等待1秒，`observe_screen` 验证是否进入聊天界面（特征：底部出现“发送消息”输入框）。
+                d. 发送消息（强制点击逻辑）：
+   - 第一步：输入内容并等待按钮激活  
+     调用 `input_text_in_element` 向输入框填入回复内容后，**强制等待1秒**（而非0.5秒，确保按钮有足够时间从灰色→红色）。  
+
+   - 第二步：精准定位发送按钮（特征硬约束）  
+     调用 `observe_screen` 工具，必须找到同时满足以下所有特征的元素：  
+     ① 位置：与输入框**同一水平线上**，紧贴输入框右侧边缘（间距≤5像素）；  
+     ② 颜色：**纯红色**（RGB值接近#FF3B30，区别于其他灰色/蓝色元素）；  
+     ③ 形状：**向右的箭头图标**（箭头尖端朝右，可能是空心或实心，尺寸约20×20像素）；  
+     ④ 状态：可点击（`observe_screen` 返回 `clickable=true`）。  
+     若未找到，立即重试 `observe_screen`（最多2次，每次间隔0.5秒，扩大识别范围至输入框右侧100像素区域）。  
+
+   - 第三步：强制执行点击  
+     找到符合特征的发送按钮后，调用 `click_element` 工具点击，**点击后必须保持界面停留0.5秒**（避免因系统延迟导致点击无效）。  
+
+   - 第四步：双重验证发送结果  
+     调用 `observe_screen` 检查：  
+     ① 输入框是否已清空（内容消失）；  
+     ② 聊天记录最底部是否出现刚发送的消息（内容、颜色与输入一致）。  
+     只有同时满足①+②，才判定为“发送成功”。  
+
+   - 第五步：失败重试机制  
+     若验证失败（输入框未空/消息未出现）：  
+     1. 第1次重试：重新定位发送按钮（可能因界面微动导致位置偏移），再次点击；  
+     2. 第2次重试：点击发送按钮后，额外调用 `perform_enter_key` 工具（模拟回车发送，作为备选方案）；  
+     3. 仍失败：记录“该条消息发送失败（内容：XXX）”，继续处理下一条，最终反馈用户。  
+                e. 发送回复后，`perform_back_press` 返回消息列表，继续下一条。识别逻辑：若连续3条均无红色圆点，判定为“当前无未读”，停止遍历。
+
+            - 小红书：
+    a. 进入小红书后，`observe_screen` 定位底部导航栏第四个“消息图标”（右上角红标），`click_element` 点击（验证：界面顶部显示“消息”标题）。
+    b. 消息列表中，未读对话特征必须满足：右侧红色圆点；`observe_screen` 定位第一条未读对话的“完整条目区域”（含头像、名称、消息预览，宽占满屏幕，高约80-100像素）。
+                c. 点击区域：必须点击该条目的“中间偏左位置”（覆盖头像和名称区域；`click_element` 点击后，等待1秒，`observe_screen` 验证是否进入聊天界面（特征：底部出现“发消息”输入框）。
+    d. 调用 `input_text_in_element` 向输入框填入回复内容（完成后**强制等待1.2秒**，确保与输入框水平最右侧按钮从灰色变为**深红色可点击状态**）；  
+       调用 `observe_screen` 定位发送按钮（必须同时满足：① 与输入框同水平线最右侧；② 深红色“纸飞机”图标或“发送”文字；③ 距离输入框右侧边缘3-8像素），获取其 `element_id`；  
+       调用 `click_element` 点击该发送按钮（点击后**停留0.8秒**，确保系统接收点击指令）；  
+       必须验证：`observe_screen` 确认① 输入框内容完全清空；② 聊天记录最底部出现刚发送的消息（内容匹配），两者同时满足才判定为发送成功。  
+    e. 若验证失败（未清空/消息未出现）：  
+       1. 第1次重试：重新定位发送按钮（可能因界面微动偏移），再次点击；  
+       2. 第2次重试：点击发送按钮后，额外调用 `perform_enter_key` 工具（模拟回车发送）；  
+       3. 仍失败：记录“该条消息发送失败（内容：XXX）”，继续处理下一条；  
+       发送成功/重试后，`perform_back_press` 返回消息列表，继续下一条。  
+    f. 若连续3条对话均无左侧红色圆点，判定为“当前无未读”，停止遍历。
+            - 微信：（保留原有逻辑，重点确保未读对话点击“条目中间区域”）
+            - QQ：
+  a. 进入QQ后，`observe_screen` 定位顶部“消息”标签（通常在界面顶部左侧，文字为“消息”，可能带红色未读数字 badge），`click_element` 点击进入消息列表（验证：界面显示所有对话条目，顶部有“搜索”框）。
+  
+  b. 消息列表中，未读对话特征必须同时满足（强制校验）：
+     ① 未读标识：对话条目左侧或右侧有**红色数字标签**（显示未读数量，如“2”）或**红色实心圆点**（无数量时），数字标签背景为纯红色，文字为白色；
+     ② 排序规则：未读对话按接收时间倒序排列，**一定位于已读对话上方**，且通常在列表前5条范围内；
+     ③ 条目结构：包含“左侧头像（圆形）+ 中间名称/消息预览 + 右侧时间/未读标识”，高度约90-110像素，宽度占满屏幕；
+     `observe_screen` 必须定位同时满足①+③的第一条条目，记录其完整区域（左上角x1,y1 - 右下角x2,y2），不满足则判定为“无未读”。
+  
+  c. 点击区域与验证（精准点击逻辑）：
+     - 点击坐标：在步骤b定位的条目区域内，取**横向中间偏左40%、纵向中间位置**（即：x = x1 + (x2-x1)*40%，y = y1 + (y2-y1)*50%），此位置覆盖“头像右侧的名称区域”（QQ的核心可点击热区）；
+     - 执行点击：调用 `click_element` 点击上述坐标，点击后**等待1秒**（QQ界面切换较快，1秒足够加载）；
+     - 双重验证是否进入聊天界面：
+       ① 必选项：`observe_screen` 检测到底部出现“输入框”（右侧可能有“+”号图标和“表情”图标）；
+       ② 辅助项：界面顶部显示联系人/群聊名称（与步骤b中的对话名称一致），且顶部有“返回”箭头（左侧）和“更多”图标（右侧）；
+       必须满足①，才判定为“进入成功”。
+     - 若验证失败（未出现输入框/停留在消息列表）：
+       1. 第1次重试：调整点击坐标为条目“横向中间位置”（覆盖消息预览区域，x = x1 + (x2-x1)*50%）；
+       2. 第2次重试：点击条目“左侧头像区域”（x = x1 + (x2-x1)*15%，确保覆盖圆形头像）；
+       3. 仍失败：标记“该未读对话无法进入”，继续检查下一条，最终反馈用户。
+-调用 `input_text_in_element` 向输入框填入回复内容（完成后**强制等待1.2秒**，确保与输入框水平最右侧按钮从灰色变为**蓝色可点击状态**）；  
+       调用 `observe_screen` 定位发送按钮（必须同时满足：① 与输入框同水平线最右侧；② 蓝色“发送”文字；③ 距离输入框右侧边缘3-8像素），获取其 `element_id`；  
+       调用 `click_element` 点击该发送按钮（点击后**停留0.8秒**，确保系统接收点击指令）；  
+       必须验证：`observe_screen` 确认① 输入框内容完全清空；② 聊天记录最底部出现刚发送的消息（内容匹配），两者同时满足才判定为发送成功。  
+            4. 结果反馈：回复完成后，按“平台（成功数/总未读数）”格式反馈，例：“已回复抖音（2/2）、小红书（1/2，1条未点击成功）、微信（3/3），共回复6条，1条未成功”。
+
+            5. 特殊场景（强化重试和反馈）：
+            - 遇验证码/弹窗：暂停并提示“[APP]需验证，请处理后点击‘继续回复’”。
+            - 点击未读对话无效（抖音/小红书）：
+                1. 第1次重试：调整点击位置至条目“正中间”（扩大点击范围）；
+                2. 第2次重试：点击条目“头像区域”（确保覆盖可交互区域）；
+                3. 仍失败：标记为“未回复”，继续下一条，最终反馈中注明“[APP]有X条未读因点击无效未回复，请手动处理”。
+
+            **重要规则**：
+            - 抖音/小红书必须按“定位图标→验证进入消息列表→定位未读条目→精准点击中间区域→验证进入聊天框”的顺序执行，每步验证失败均需重试或标记。
+            - 禁止点击未读条目的右侧“已读按钮”“更多选项”等无关元素（通过`observe_screen`识别并避开）。
             
-            **重要规则：禁止在未确认文件存在的情况下，直接猜测并使用 `get_manual_section` 工具。**
+            
+            - 所有操作基于`observe_screen`返回的实际元素，禁止依赖固定坐标（适应不同屏幕尺寸）。
         """.trimIndent() // <-- 使用 trimIndent() 来移除多余的格式化缩进
         )
         conversationHistory.add(systemMessage)
@@ -329,8 +421,9 @@ class ChatViewModel : ViewModel() {
      * 处理与大模型API的单次请求和响应
      */
     private suspend fun processConversation(context: Context) {
+        val modelName = AppConfig.modelName
         val request = ChatCompletionRequest(
-            model = "qwen-plus",
+            model = modelName ?: "qwen3-235b-a22b-instruct-2507",
             messages = conversationHistory, // 发送完整对话历史
             tools = availableTools // 告知模型它能使用哪些工具
         )
@@ -442,10 +535,6 @@ class ChatViewModel : ViewModel() {
                 "return_to_home_screen" -> {
                     // 调用在第一步中创建的函数
                     SystemTools.returnToHomeScreen(context)
-                }
-                "clean_memory" -> {
-                    // 调用在第一步中创建的函数
-                    SystemTools.cleanMemory(context)
                 }
                     else -> "错误：未知的工具 ${toolCall.function.name}"
             }
