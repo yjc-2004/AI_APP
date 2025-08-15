@@ -70,16 +70,6 @@
                 android:src="@drawable/ic_send" />
         </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/button_enable_accessibility"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@drawable/bg_send_button"
-            android:elevation="2dp"
-            android:src="@drawable/ic_agent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            android:layout_margin="16dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

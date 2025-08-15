@@ -4,7 +4,9 @@
     android:layout_width="300dp"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_dialog_rounded"
-    android:padding="24dp">
+    android:padding="24dp"
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
     <ImageView
         android:id="@+id/icon_agent"
@@ -50,21 +52,28 @@
         android:orientation="horizontal"
         android:gravity="center"
         android:layout_marginTop="24dp"
+
+        android:clipChildren="false"
+        android:clipToPadding="false"
+
         app:layout_constraintTop_toBottomOf="@id/message"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
+
         <Button
             android:id="@+id/btn_cancel"
             android:layout_width="0dp"
             android:layout_height="40dp"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:text="取消"
-            android:background="@drawable/bg_button_gray"
-            android:textColor="#888888"
+            android:textColor="#333333"
             android:textSize="15sp"
-            android:layout_marginEnd="8dp"/>
+            android:background="@drawable/bg_button_gray"
+
+            android:elevation="4dp" />
 
         <Button
             android:id="@+id/btn_go"
@@ -72,8 +81,10 @@
             android:layout_height="40dp"
             android:layout_weight="1"
             android:text="开启"
+            android:textColor="#333333"
+            android:textSize="15sp"
             android:background="@drawable/bg_button_gray"
-            android:textColor="#ffffff"
-            android:textSize="15sp"/>
+
+            android:elevation="4dp" />
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -32,6 +32,7 @@ import com.example.aiassistant.services.AgentForegroundService
 import com.example.aiassistant.utils.AccessibilityUtils
 import kotlinx.coroutines.launch
 import com.example.aiassistant.data.ChatMessage as ApiChatMessage // 使用别名区分API模型
+import com.example.aiassistant.config.AppConfig
 
 class MainActivity : AppCompatActivity() {
 
@@ -42,14 +43,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsButton: ImageView
     private lateinit var assistantLayout: ConstraintLayout
     private lateinit var rootContainer: View
-
     // --- 数据和适配器 ---
     // MODIFIED: 使用正确的UI模型 ChatMessage，以匹配ChatAdapter的构造函数
     private val messageListForAdapter = mutableListOf<ChatMessage>()
     private lateinit var chatAdapter: ChatAdapter
 
     // --- 无障碍相关 ---
-    private lateinit var enableAccessibilityButton: ImageButton
     private var accessibilityDialog: AlertDialog? = null
     private var accessibilityObserver: ContentObserver? = null
 
@@ -59,13 +58,14 @@ class MainActivity : AppCompatActivity() {
 
         startAgentService()
 
-        enableAccessibilityButton = findViewById(R.id.button_enable_accessibility)
+
         setupViews()
         setupRecyclerView()
         setupClickListeners()
         setupKeyboardListener()
         observeAgentBus()
         setupAccessibilityObserver()
+        AppConfig.init(this)
     }
 
     private fun startAgentService() {
@@ -91,7 +91,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupClickListeners() {
         settingsButton.setOnClickListener {
-            Toast.makeText(this, "设置按钮被点击", Toast.LENGTH_SHORT).show()
+            //Toast.makeText(this, "设置按钮被点击", Toast.LENGTH_SHORT).show()
+            val intent = Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
         }
 
         sendButton.setOnClickListener {
@@ -112,6 +114,10 @@ class MainActivity : AppCompatActivity() {
             return@setOnEditorActionListener false
         }
     }
+
+
+
+
 
     private fun setupKeyboardListener() {
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { _, insets ->
@@ -153,13 +159,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!AccessibilityUtils.isAccessibilityServiceEnabled(this, AgentAccessibilityService::class.java)) {
+        if (!isA11yEnabled()) {
             showEnableAccessibilityDialog()
         } else {
             accessibilityDialog?.dismiss()
             accessibilityDialog = null
         }
-        updateAccessibilityButtonState()
     }
 
     override fun onDestroy() {
@@ -170,25 +175,14 @@ class MainActivity : AppCompatActivity() {
         accessibilityDialog?.dismiss()
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val serviceId = "com.example.aiassistant.services.AgentAccessibilityService"
-        val settingValue = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    //用于检验无障碍服务是否开启
+    private fun isA11yEnabled() =
+        AccessibilityUtils.isAccessibilityServiceEnabled(
+            this,
+            AgentAccessibilityService::class.java
         )
-        return settingValue?.let {
-            TextUtils.SimpleStringSplitter(':').apply { setString(it) }
-                .any { s -> s.equals(serviceId, ignoreCase = true) }
-        } ?: false
-    }
 
-    private fun updateAccessibilityButtonState() {
-        if (isAccessibilityServiceEnabled()) {
-            enableAccessibilityButton.isEnabled = false
-        } else {
-            enableAccessibilityButton.isEnabled = true
-        }
-    }
+
 
     private fun showEnableAccessibilityDialog() {
         if (accessibilityDialog?.isShowing == true) return
@@ -212,6 +206,7 @@ class MainActivity : AppCompatActivity() {
             override fun onChange(selfChange: Boolean) {
                 super.onChange(selfChange)
                 checkAndDismissDialog()
+                if (isA11yEnabled()) accessibilityDialog?.dismiss()
             }
         }
         contentResolver.registerContentObserver(
@@ -222,10 +217,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkAndDismissDialog() {
-        if (isAccessibilityServiceEnabled()) {
+        if (isA11yEnabled())  {
             accessibilityDialog?.dismiss()
             accessibilityDialog = null
-            updateAccessibilityButtonState()
+
         }
     }
 }
+

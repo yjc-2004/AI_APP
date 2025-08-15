@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="模型设置">
+
+        <EditTextPreference
+            app:key="key_model_name"
+            app:title="模型名称"
+            app:defaultValue="qwen3-235b-a22b-instruct-2507"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+    <PreferenceCategory app:title="API设置">
+
+        <EditTextPreference
+            app:key="key_api_key"
+            app:title="API Key"
+            app:summary="设置您的百炼API Key"
+            app:defaultValue="sk-e97b135e18b542138d6313ed98f08749"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+</PreferenceScreen>
